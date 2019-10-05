@@ -1,0 +1,166 @@
+#optioncalculator.py
+# -*- coding: UTF-8 -*- 
+from Tkinter import *
+from math import *
+from tkMessageBox import *
+from numpy import *
+from scipy.stats import *
+
+#创建期权类
+class Option:
+
+    def __init__(self, cp, s0, k, t, r, sigma, dv=0):
+        #欧式期权的7个基本信息初始化
+        #看涨 
+        self.cp = '看涨'  
+        #成交价格
+        self.s0 = s0 
+        #执行价格
+        self.k = k 
+        #到期时间
+        self.t = t 
+        #波动率
+        self.sigma = sigma * 1.0
+        #无风险利率——5年期的国债利率4%
+        self.r = r
+        #分红,默认为0——2018年很多公司经常不派发股利
+        self.dv = dv 
+        #bs模型正态分布的d1 
+        self.d_1 = (log(self.s0 / self.k) + (self.r - self.dv + .5 * self.sigma ** 2) * self.t) / self.sigma / sqrt(self.t)
+        #bs模型正态分布的d2 同理
+        self.d_2 = self.d_1 - self.sigma * sqrt(self.t)
+        
+    #b-s期权公式    
+    def bsoption(self):
+        #pass  #如果老师没有安scipy.stats可以在这里跳过
+        return  self.s0 * exp(-self.dv * self.t) * norm.cdf(self.d_1) \
+               - self.k * exp(-self.r * self.t) * norm.cdf(self.d_2)
+    
+    #蒙特卡尔方法公式 time是模拟次数
+    def mcoption(self, time=100000):
+        #pass    #如果老师没有安numpy可以在这里跳过
+        zhengtai = random.normal(0, 1, time)
+        st = self.s0 * exp((self.r - self.dv - 0.5 * self.sigma ** 2) * self.t + self.sigma * self.t ** 0.5 * zhengtai)
+        p = []
+        for St in st:
+            p.append(max((St - self.k), 0))
+        return average(p) * exp(-self.r * self.t)
+
+#初始化Tkinter窗口
+root = Tk() 
+root.title('欧式看涨期权计算器')
+Label(root, text='请输入各项参数，点击 计算 按钮计算').grid(row=0, column=0, columnspan=2)
+
+#初始信息
+cp = StringVar()
+Label(root, text='类型').grid(row=2, column=0, sticky=W)
+Radiobutton(root, text='看涨', variable=cp, value='c').grid(row=2, column=1)
+
+#输入界面
+plist = ['成交价格', '执行价格', '到期时间(天)',
+         '无风险利率', '波动率', '股利', '模拟次数>1000']
+received = []
+#r用来记录行数布局 循环减少代码量 
+r = 3 # r start from 0 and now is 3
+for content in plist:
+    Label(root, text=content).grid(column=0, sticky=W)
+    e = Entry(root)
+    e.grid(row=r, column=1, columnspan=2, sticky=W+E)
+    received.append(e)
+    r += 1
+
+#结果界面
+#点击button
+Button(root, text='计算').grid(row=r)
+r += 1
+#答案提示框
+answ = Label(root, text='结果是:')
+answ.grid(row=r, columnspan=3)
+r += 1
+#答案显示框
+bs = Label(root)
+mc = Label(root)
+bs.grid(row=r, columnspan=2, sticky=E)
+mc.grid(row=r+1, columnspan=2, sticky=E)
+#答案对应模型
+Label(root, text='BS模型的模拟结果是 ').grid(row=r, sticky=W)
+Label(root, text='蒙特卡尔模拟结果是').grid(row=r+1, sticky=W)
+
+#获取用户输入参数
+def calc():
+    newlist = []
+    for e in received:
+        try:
+            p = float(e.get())
+            newlist.append(p)
+        except:
+            answ.config(text='输入有误，请输入正确参数', fg='red')
+            e.delete(0, len(e.get()))
+            return 0
+        
+#用用户输入的值创造对象，带入函数输出结果
+    o = Option(cp.get(), received[0], received[1], received[2] / 365, received[3], received[4], received[5])
+    answ.config(text='结果是', fg='red')
+    bs.config(text=str("%.8f" % o.bsoption()))
+    mc.config(text=str("%.8f" % o.mcoption(time=received[6])))
+    
+
+#新窗口“更多信息”
+def create():
+    #初始化
+    top = Toplevel()
+    top.title('更多信息')
+    top.geometry('350x320')
+    #tkinterMessageBox确认用户希望继续
+    answer=askokcancel("继续", "请问您是否确认继续?")
+    if answer:
+        print "OK"
+    #更多关于期权的信息
+    Label(top, text='关于期权你可能还想知道：').grid(row=0,column=0)
+    m=5
+   
+    Label(top, text='欧式期权:是指只能在规定的到期日\n才能要求卖方胜约.执行其权利的权利。').grid(row=m,columnspan=5,rowspan=2,sticky=EW)
+    m+=3
+   
+    Label(top, text='看涨期权:如果到期日的股票价格价\n高于执行价格，那么看涨期权处于实值，\n持有者会执行期权').grid(row=m,columnspan=5,rowspan=2,sticky=EW)
+    m+=5
+    Label(top, text='---------------------------------------').grid(row=m,sticky=EW)
+    m+=1
+    
+    Label(top, text='您还有什么反馈嘛').grid(row=m,sticky=EW)
+    m+=1
+    #用户反馈单选按钮创建 默认在好评上
+    v=IntVar()
+    v.set(1)
+    Radiobutton(top,text='好评',variable=v,value=1).grid()
+    Radiobutton(top,text='有待改进',variable=v,value=2).grid()
+    m+=3
+    #订阅栏
+    Label(top, text='如果订阅请留下您的邮箱').grid(row=m)
+    m+=1
+    v1 = StringVar()
+    #用户输入
+    e1 = Entry(top,textvariable=v1,width=37)
+    e1.grid(row=m,column=0,padx=1,pady=1)
+    m+=1
+    #事件驱动 提交后弹出成功窗口
+    def callback():  
+        answer=askokcancel("继续", "感谢订阅！")
+        #用户输入的邮箱生成txt，存储
+        f=open("email.txt","w")
+        f.write(e1.get())
+        f.close()
+        if answer:
+            print "Thank You"
+    #提交按钮
+    Button(top, text='提交' ,command=callback).grid(row=m)
+    m+=3
+    #作者信息
+    Label(top, text="Author:翟文祺").grid(row=m,sticky=SE)
+    #进入循环
+    top.mainloop()
+
+#创建更多信息按钮，调用create函数
+Button(root, text='更多信息', command=create).grid(sticky=SE)
+
+root.mainloop()  
